@@ -88,11 +88,10 @@ class scraper():
             all_games = soup.find_all('div', class_='gamelist_item')
             for game in all_games:
                 if name in game.find_all('div')[1].text:
-                    site = '[{} on Board Game Arena]('.format(name)
+                    site = '[{}]('.format(name)
                     site += 'https://boardgamearena.com'
                     site += game.find(href=True)['href']
                     site += ')'
-                    print(site)
                     return site
         if boite:
             site = '[{} on Boîte a Jeux]('.format(name)
@@ -110,10 +109,20 @@ class scraper():
             site += ')'
             return site
         if yucata:
-            site = '[{} on Yucata]('.format(name)
-            site += 'url'
-            site += ')'
-            return site
+            html = requests.get('https://www.yucata.de/en')
+            soup = BeautifulSoup(html.text, 'html.parser')
+            all_games = soup.find_all('a')
+            for game in all_games:
+                if name in game.text:
+                    site += '[{}]('.format(game.text)
+                    site += 'https://www.yucata.de'
+                    site += game['href']
+                    site += ')\n'
+
+            if site == '':
+                return False
+            else:
+                return site
         return False
 
     def get_game(self):
@@ -132,6 +141,11 @@ class scraper():
             yucata = self.get_site(name, yucata=True)
             boite = self.get_site(name, boite=True)
             app = self.get_site(name, app=True)
+            # Only save games that are available to play virtually somewhere
+            if tabletopia or tts or bga or yucata or boite or app:
+                save = True
+            else:
+                save = False
             game = self.game_setter(
                 name, description, bgg, image, tabletopia, tts, bga, yucata, boite, app)
         else:
@@ -139,7 +153,7 @@ class scraper():
             success = False
         print(game)
 
-        return game, success
+        return game, success, save
 
 
 def main():
@@ -156,13 +170,12 @@ def scrape(scraper, largest_id=100, verbose=False):
         scraper.increment_url(num=num)
         if verbose:
             print('Now searching: {}'.format(scraper.current_url))
-        game, success = scraper.get_game()
-        if success:
+        game, success, save = scraper.get_game()
+        if success and save:
             output['games'].append(game)
         else:
             # Could log issues here
             if verbose:
-
                 print('Skipping {}'.format(scraper.current_url))
 
 
