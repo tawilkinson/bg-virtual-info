@@ -1,6 +1,7 @@
 import requests
 from urllib.parse import urlunsplit, urlencode
 from bs4 import BeautifulSoup
+from save_info import Writer
 
 
 class scraper():
@@ -67,20 +68,25 @@ class scraper():
         return name, success
 
     def get_desc(self):
-        desc = self.soup.find('meta',  property='og:description')['content']
+        try:
+            desc = self.soup.find('meta',  property='og:description')[
+                'content']
+        except:
+            desc = ''
         return desc
 
     def get_image(self):
-        image = self.soup.find('meta',  property='og:image')['content']
+        try:
+            image = self.soup.find('meta',  property='og:image')['content']
+        except:
+            image = ''
         return image
 
     def get_site(self, name, app=False, bga=False, boite=False, tabletopia=False, tts=False, yucata=False):
         site = ''
         if app:
-            site = '[{} App]('.format(name)
-            site += 'url'
-            site += ')'
-            return site
+            # TODO: work out best way to try and find app using Google search
+            pass
         if bga:
             html = requests.get(
                 'https://boardgamearena.com/gamelist?section=all')
@@ -108,10 +114,8 @@ class scraper():
             else:
                 return site
         if tabletopia:
-            site = '[{} on Tabletopia]('.format(name)
-            site += 'url'
-            site += ')'
-            return site
+            # TODO: Need JS scraping
+            pass
         if tts:
             html = requests.get(
                 'https://store.steampowered.com/dlc/286160/Tabletop_Simulator/#browse')
@@ -121,7 +125,7 @@ class scraper():
                 if name.lower() in game.text.lower():
                     site += '[TTS DLC - {}]('.format(name)
                     site += game['href']
-                    site += ')'
+                    site += ')\n'
 
             if site == '':
                 return False
@@ -147,7 +151,6 @@ class scraper():
     def get_game(self):
         self.html = requests.get(self.current_url)
 
-        # print(self.html.text)
         if self.html.status_code == 200:
             self.soup = BeautifulSoup(self.html.text, 'html.parser')
             bgg = self.get_bgg()
@@ -170,32 +173,35 @@ class scraper():
         else:
             game = self.game_setter()
             success = False
-        print(game)
 
         return game, success, save
 
 
 def main():
     bgg_scraper = scraper('boardgamegeek.com')
-    scrape(bgg_scraper, 6, True)
+    scrape(bgg_scraper, 190000, True)
 
 
 def scrape(scraper, largest_id=100, verbose=False):
     print('Base url to search: {}'.format(scraper.current_url))
     output = {}
     output['games'] = []
-    # for num in range(1, largest_id+1):
-    for num in range(266191, 266193):
+    for num in range(1, largest_id+1):
         scraper.increment_url(num=num)
         if verbose:
             print('Now searching: {}'.format(scraper.current_url))
         game, success, save = scraper.get_game()
         if success and save:
             output['games'].append(game)
+            print('Adding {}, {} games in database'.format(
+                game['name'], len(output['games'])))
         else:
             # Could log issues here
             if verbose:
-                print('Skipping {}'.format(scraper.current_url))
+                print('Skipping {}'.format(game['name']))
+
+    write = Writer(output, 'games.json')
+    write.dump_to_file()
 
 
 if __name__ == '__main__':
