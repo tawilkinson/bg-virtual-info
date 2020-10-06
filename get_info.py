@@ -1,10 +1,11 @@
 import requests
+import argparse
 from urllib.parse import urlunsplit, urlencode
 from bs4 import BeautifulSoup
 from save_info import Writer
 
 
-class scraper():
+class Scraper():
     def __init__(self, base_url, https=True):
         self.base_url = base_url
         self.current_url = base_url
@@ -17,6 +18,87 @@ class scraper():
         if 'boardgamegeek' in base_url:
             self.setup_bgg()
         self.set_url()
+        print('--- Caching Board Game Arena')
+        self.setup_bga()
+        print('+++ {} games added'.format(len(self.bga_dict)))
+        print('--- Caching Boîte à Jeux')
+        self.setup_boite()
+        print('+++ {} games added'.format(len(self.boite_dict)))
+        print('--- Caching Tabletop Simulator')
+        self.setup_tts()
+        print('+++ {} games added'.format(len(self.tts_dict)))
+        print('--- Caching Yucata')
+        self.setup_yucata()
+        print('+++ {} games added'.format(len(self.yucata_dict)))
+
+    def setup_bga(self):
+        try:
+            html = requests.get(
+                'https://boardgamearena.com/gamelist?section=all')
+        except:
+            print('!!! Can\'t get Board Game Arena data')
+            exit()
+        soup = BeautifulSoup(html.text, 'html.parser')
+        all_games = soup.find_all('div', class_='gamelist_item')
+        self.bga_dict = {}
+        for game in all_games:
+            name = game.find(
+                'div', class_='gameitem_baseline gamename').text.lstrip().rstrip()
+            site = '[{}]('.format(name)
+            site += 'https://boardgamearena.com'
+            site += game.find(href=True)['href']
+            site += ')'
+            self.bga_dict[name] = site
+
+    def setup_boite(self):
+        try:
+            html = requests.get('http://www.boiteajeux.net/index.php?p=regles')
+        except:
+            print('!!! Can\'t get Boite a Jeux data')
+            exit()
+        soup = BeautifulSoup(html.text, 'html.parser')
+        self.boite_dict = {}
+        all_games = soup.find_all('div', class_='jeuxRegles')
+        for game in all_games:
+            name = game.text.lower().lstrip().split('\n')[0]
+            site = '[{}]('.format(name)
+            site += 'http://www.boiteajeux.net/index.php?p=regles'
+            site += ')'
+            self.boite_dict[name] = site
+
+    def setup_tts(self):
+        try:
+            html = requests.get(
+                'https://store.steampowered.com/dlc/286160/Tabletop_Simulator')
+        except:
+            print('!!! Can\'t get Tabletop Simulator data')
+            exit()
+        soup = BeautifulSoup(html.text, 'html.parser')
+        all_games = soup.find_all('a', class_='recommendation_link')
+        self.tts_dict = {}
+        for game in all_games:
+            name = game.find('span', class_='color_created').text
+            site = '[{}]('.format(name)
+            site += game['href']
+            site += ')'
+            self.tts_dict[name] = site
+
+    def setup_yucata(self):
+        try:
+            html = requests.get('https://www.yucata.de/en')
+        except:
+            print('!!! Can\'t get Yucata data')
+            exit()
+        soup = BeautifulSoup(html.text, 'html.parser')
+        all_games = soup.find_all('a')
+        self.yucata_dict = {}
+        for game in all_games:
+            name = game.text
+            site = '[{}]('.format(game.text)
+            site += 'https://www.yucata.de'
+            site += game['href']
+            site += ')'
+            self.yucata_dict[name] = site
 
     def setup_bgg(self):
         self.base_path = '/boardgame/'
@@ -84,68 +166,36 @@ class scraper():
 
     def get_site(self, name, app=False, bga=False, boite=False, tabletopia=False, tts=False, yucata=False):
         site = ''
+        games = []
+        separator = '\n'
         if app:
             # TODO: work out best way to try and find app using Google search
             pass
         if bga:
-            html = requests.get(
-                'https://boardgamearena.com/gamelist?section=all')
-            soup = BeautifulSoup(html.text, 'html.parser')
-            all_games = soup.find_all('div', class_='gamelist_item')
-            for game in all_games:
-                if name in game.find_all('div')[1].text:
-                    site = '[{}]('.format(name)
-                    site += 'https://boardgamearena.com'
-                    site += game.find(href=True)['href']
-                    site += ')'
-                    return site
+            for key in self.bga_dict:
+                if name in key:
+                    games.append(self.bga_dict[key])
+            site = separator.join(games)
         if boite:
-            html = requests.get('http://www.boiteajeux.net/index.php?p=regles')
-            soup = BeautifulSoup(html.text, 'html.parser')
-            all_games = soup.find_all('div', class_='jeuxRegles')
-            for game in all_games:
-                if name.lower() in game.text.lower():
-                    site += '[{}]('.format(name)
-                    site += 'http://www.boiteajeux.net/index.php?p=regles'
-                    site += ')'
-
-            if site == '':
-                return False
-            else:
-                return site
+            for key in self.boite_dict:
+                if name.lower() in key:
+                    games.append(self.boite_dict[key])
+            site = separator.join(games)
         if tabletopia:
             # TODO: Need JS scraping
             pass
         if tts:
-            html = requests.get(
-                'https://store.steampowered.com/dlc/286160/Tabletop_Simulator/#browse')
-            soup = BeautifulSoup(html.text, 'html.parser')
-            all_games = soup.find_all('a', class_='recommendation_link')
-            for game in all_games:
-                if name.lower() in game.text.lower():
-                    site += '[TTS DLC - {}]('.format(name)
-                    site += game['href']
-                    site += ')\n'
-
-            if site == '':
-                return False
-            else:
-                return site
+            for key in self.tts_dict:
+                if name in key:
+                    games.append(self.tts_dict[key])
+            site = separator.join(games)
         if yucata:
-            html = requests.get('https://www.yucata.de/en')
-            soup = BeautifulSoup(html.text, 'html.parser')
-            all_games = soup.find_all('a')
-            for game in all_games:
-                if name in game.text:
-                    site += '[{}]('.format(game.text)
-                    site += 'https://www.yucata.de'
-                    site += game['href']
-                    site += ')\n'
-
-            if site == '':
-                return False
-            else:
-                return site
+            for key in self.yucata_dict:
+                if name in key:
+                    games.append(self.yucata_dict[key])
+            site = separator.join(games)
+        if site:
+            return site
         return False
 
     def get_game(self):
@@ -178,28 +228,47 @@ class scraper():
 
 
 def main():
-    bgg_scraper = scraper('boardgamegeek.com')
-    scrape(bgg_scraper, 190000, True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-v', '--verbose', help='Verbose output',
+                        action='store_true')
+    parser.add_argument('-s', '--start', help='Starting page to scrape',
+                        type=int, default=1)
+    # approx 190,000 entries at time of writing script
+    parser.add_argument('-e', '--end', help='End page to scrape',
+                        type=int, default=190000)
+    args = parser.parse_args()
+
+    print('--- Scraping BGG from {} to {}'.format(args.start, args.end))
+
+    bgg_scraper = Scraper('boardgamegeek.com')
+    scrape(bgg_scraper, args.start, args.end, args.verbose)
 
 
-def scrape(scraper, largest_id=100, verbose=False):
-    print('Base url to search: {}'.format(scraper.current_url))
+def scrape(scraper, start=1, end=100, verbose=False):
+    print('--- Base url to search: {}'.format(scraper.current_url))
     output = {}
     output['games'] = []
-    for num in range(1, largest_id+1):
+    for num in range(start, end+1):
         scraper.increment_url(num=num)
         if verbose:
-            print('Now searching: {}'.format(scraper.current_url))
-        game, success, save = scraper.get_game()
+            print('--- Now searching: {}'.format(scraper.current_url))
+        try:
+            game, success, save = scraper.get_game()
+        except ConnectionError:
+            success = False
+            print('!!! Connection Error')
+
         if success and save:
             output['games'].append(game)
-            print('Adding {}, {} games in database'.format(
+            print('+++ Adding {}, {} games in database'.format(
                 game['name'], len(output['games'])))
         else:
             # Could log issues here
             if verbose:
-                print('Skipping {}'.format(game['name']))
+                print('!!! Skipping {}'.format(game['name']))
 
+    print(
+        '--- Finished: {} games in database'.format(len(output['games'])))
     write = Writer(output, 'games.json')
     write.dump_to_file()
 

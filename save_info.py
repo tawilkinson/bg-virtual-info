@@ -9,5 +9,6 @@ class Writer():
         self.filen = filen
 
     def dump_to_file(self):
+        print('--- Dumping to file: {}'.format(self.filen))
         with open(os.path.join(self.dir_path, self.filen), 'w') as json_file:
             json.dump(self.obj, json_file, indent=2)
