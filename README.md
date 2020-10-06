@@ -16,6 +16,7 @@ Optional arguments:
 - `-v`, `--verbose`: prints more information to the command line
 - `-s`, `--start`: start scraping from a specific number, default = 1
 - `-e`, `--end`: stop scraping at a sepcific number, default = 190000
+- `-r`, `--restart`: acquires all data from scratch overwriting a local database
 - `-h`, `--help`: displays help text
 
 ## Limitations
@@ -27,7 +28,6 @@ Optional arguments:
 
 ## TODO
 
-- Occasionally checkpoint to file so that if script crashes or is killed you don't lose all scraped data
 - Load JavaScript sites so that Tabletopia can be cached
 - Cache all Tabletop Simulator DLC
 - [Optional] Cache Tabletop Simulator Workshop items

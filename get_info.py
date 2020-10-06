@@ -1,8 +1,10 @@
 import requests
 import argparse
+import shelve
 from urllib.parse import urlunsplit, urlencode
+from urllib3 import exceptions
 from bs4 import BeautifulSoup
-from save_info import Writer
+import save_info
 
 
 class Scraper():
@@ -118,10 +120,11 @@ class Scraper():
             self.id += 1
         self.set_url()
 
-    def game_setter(self, name='', description='', bgg='', image='',
+    def game_setter(self, id, name='', description='', bgg='', image='',
                     tabletopia=False, tts=False, bga=False, yucata=False,
                     boite=False, app=False):
         game_dict = {}
+        game_dict['id'] = id
         game_dict['name'] = name
         game_dict['description'] = description
         game_dict['bgg'] = bgg
@@ -173,12 +176,12 @@ class Scraper():
             pass
         if bga:
             for key in self.bga_dict:
-                if name in key:
+                if name == key:
                     games.append(self.bga_dict[key])
             site = separator.join(games)
         if boite:
             for key in self.boite_dict:
-                if name.lower() in key:
+                if name.lower() == key:
                     games.append(self.boite_dict[key])
             site = separator.join(games)
         if tabletopia:
@@ -186,19 +189,19 @@ class Scraper():
             pass
         if tts:
             for key in self.tts_dict:
-                if name in key:
+                if name == key:
                     games.append(self.tts_dict[key])
             site = separator.join(games)
         if yucata:
             for key in self.yucata_dict:
-                if name in key:
+                if name == key:
                     games.append(self.yucata_dict[key])
             site = separator.join(games)
         if site:
             return site
         return False
 
-    def get_game(self):
+    def get_game(self, id):
         self.html = requests.get(self.current_url)
 
         if self.html.status_code == 200:
@@ -219,9 +222,9 @@ class Scraper():
             else:
                 save = False
             game = self.game_setter(
-                name, description, bgg, image, tabletopia, tts, bga, yucata, boite, app)
+                id, name, description, bgg, image, tabletopia, tts, bga, yucata, boite, app)
         else:
-            game = self.game_setter()
+            game = self.game_setter(id)
             success = False
 
         return game, success, save
@@ -236,40 +239,60 @@ def main():
     # approx 190,000 entries at time of writing script
     parser.add_argument('-e', '--end', help='End page to scrape',
                         type=int, default=190000)
+    parser.add_argument('-r', '--restart', help='Ignore previously acquired data and overwrite',
+                        action='store_false')
     args = parser.parse_args()
 
     print('--- Scraping BGG from {} to {}'.format(args.start, args.end))
 
     bgg_scraper = Scraper('boardgamegeek.com')
-    scrape(bgg_scraper, args.start, args.end, args.verbose)
+    scrape(bgg_scraper, args.start, args.end, args.verbose, args.restart)
 
 
-def scrape(scraper, start=1, end=100, verbose=False):
+def scrape(scraper, start=1, end=100, verbose=False, resume=True):
     print('--- Base url to search: {}'.format(scraper.current_url))
-    output = {}
-    output['games'] = []
-    for num in range(start, end+1):
-        scraper.increment_url(num=num)
-        if verbose:
-            print('--- Now searching: {}'.format(scraper.current_url))
+
+    with shelve.open('games') as db:
         try:
-            game, success, save = scraper.get_game()
-        except ConnectionError:
-            success = False
-            print('!!! Connection Error')
+            if db['last_id'] > 0 and resume:
+                print('--- Resuming from id: {}'.format(db['last_id']))
+                start = db['last_id'] + 1
+        except:
+            print('!!! No stored data, start from start')
+            db['last_id'] = 0
 
-        if success and save:
-            output['games'].append(game)
-            print('+++ Adding {}, {} games in database'.format(
-                game['name'], len(output['games'])))
-        else:
-            # Could log issues here
+        for num in range(start, end+1):
+            db['last_id'] = num
+            scraper.increment_url(num=num)
             if verbose:
-                print('!!! Skipping {}'.format(game['name']))
+                print('--- Now searching: {}'.format(scraper.current_url))
+            try:
+                game, success, save = scraper.get_game(num)
+            except ConnectionError:
+                success = False
+                print('!!! Connection Error')
+            except exceptions.MaxRetryError:
+                success = False
+                print('!!! Max Retry Error')
+                exit()
 
+            if success and save:
+                db[str(num)] = game
+                print('+++ Adding {}, {} games in database'.format(
+                    game['name'], len(db)))
+            else:
+                # Could log issues here
+                if verbose:
+                    print('!!! Skipping {}'.format(game['name']))
+
+        output = {}
+        output['games'] = []
+        for key in db.keys():
+            if key != 'last_id':
+                output['games'].append(db[key])
     print(
         '--- Finished: {} games in database'.format(len(output['games'])))
-    write = Writer(output, 'games.json')
+    write = save_info.Writer(output, 'games.json')
     write.dump_to_file()
 
 

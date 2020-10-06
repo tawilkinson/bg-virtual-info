@@ -3,7 +3,7 @@ import os
 
 
 class Writer():
-    def _init__(self, obj, filen):
+    def __init__(self, obj, filen):
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
         self.obj = obj
         self.filen = filen
