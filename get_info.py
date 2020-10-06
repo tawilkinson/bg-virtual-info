@@ -94,20 +94,39 @@ class scraper():
                     site += ')'
                     return site
         if boite:
-            site = '[{} on Boîte a Jeux]('.format(name)
-            site += 'url'
-            site += ')'
-            return site
+            html = requests.get('http://www.boiteajeux.net/index.php?p=regles')
+            soup = BeautifulSoup(html.text, 'html.parser')
+            all_games = soup.find_all('div', class_='jeuxRegles')
+            for game in all_games:
+                if name.lower() in game.text.lower():
+                    site += '[{}]('.format(name)
+                    site += 'http://www.boiteajeux.net/index.php?p=regles'
+                    site += ')'
+
+            if site == '':
+                return False
+            else:
+                return site
         if tabletopia:
             site = '[{} on Tabletopia]('.format(name)
             site += 'url'
             site += ')'
             return site
         if tts:
-            site = '[{} on TableTop Simulator]('.format(name)
-            site += 'url'
-            site += ')'
-            return site
+            html = requests.get(
+                'https://store.steampowered.com/dlc/286160/Tabletop_Simulator/#browse')
+            soup = BeautifulSoup(html.text, 'html.parser')
+            all_games = soup.find_all('a', class_='recommendation_link')
+            for game in all_games:
+                if name.lower() in game.text.lower():
+                    site += '[TTS DLC - {}]('.format(name)
+                    site += game['href']
+                    site += ')'
+
+            if site == '':
+                return False
+            else:
+                return site
         if yucata:
             html = requests.get('https://www.yucata.de/en')
             soup = BeautifulSoup(html.text, 'html.parser')
@@ -166,7 +185,7 @@ def scrape(scraper, largest_id=100, verbose=False):
     output = {}
     output['games'] = []
     # for num in range(1, largest_id+1):
-    for num in range(820, 823):
+    for num in range(266191, 266193):
         scraper.increment_url(num=num)
         if verbose:
             print('Now searching: {}'.format(scraper.current_url))
