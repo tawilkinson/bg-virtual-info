@@ -274,12 +274,13 @@ def scrape(scraper, start=1, end=100, verbose=False, resume=True):
             except exceptions.MaxRetryError:
                 success = False
                 print('!!! Max Retry Error')
-                exit()
+                # Likely due to server rejecting too many connections
+                break
 
             if success and save:
                 db[str(num)] = game
-                print('+++ Adding {}, {} games in database'.format(
-                    game['name'], len(db)))
+                print('+++ Adding id:{} - {}, {} games in database'.format(
+                    num, game['name'], len(db)))
             else:
                 # Could log issues here
                 if verbose:
