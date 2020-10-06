@@ -203,6 +203,7 @@ class Scraper():
 
     def get_game(self, id):
         self.html = requests.get(self.current_url)
+        save = False
 
         if self.html.status_code == 200:
             self.soup = BeautifulSoup(self.html.text, 'html.parser')
@@ -219,8 +220,6 @@ class Scraper():
             # Only save games that are available to play virtually somewhere
             if tabletopia or tts or bga or yucata or boite or app:
                 save = True
-            else:
-                save = False
             game = self.game_setter(
                 id, name, description, bgg, image, tabletopia, tts, bga, yucata, boite, app)
         else:
