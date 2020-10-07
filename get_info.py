@@ -169,9 +169,10 @@ class Scraper():
             game_tabletopia_url = result['href']
             game_tabletopia_url = f'https://tabletopia.com{game_tabletopia_url}'
             formatted_link = f'[{game_name} on Tabletopia]({game_tabletopia_url})'
-            self.tabletopia_dict[game_name] = formatted_link
-            print('+++ Caching {} to Tabletopia: {} games on Tabletopia'.format(game_name,
-                                                                                len(self.tabletopia_dict)))
+            if name == game_name:
+                self.tabletopia_dict[game_name] = formatted_link
+                print('+++ Caching {} to Tabletopia: {} games on Tabletopia'.format(game_name,
+                                                                                    len(self.tabletopia_dict)))
 
     def setup_tts(self):
         tts_dlc = Webpage(self.tts_dlc_url)
@@ -196,13 +197,14 @@ class Scraper():
         # Don't lose the official DLC
         sites = []
         for key in self.tts_dict:
-            if name in key:
+            name_check = 'Tabletop Simulator - ' + name
+            if name_check == key:
                 sites.append(self.tts_dict[key])
         tts_search = Webpage(self.make_tts_search_url(name)).page_html
         search_results = tts_search.find_all(
             'div', {'class': 'workshopItemTitle'})
         for result in search_results:
-            this_name = result.text
+            game_name = result.text
             url = result.parent['href']
             if 'https://steamcommunity.com' in url:
                 url = url.replace(
@@ -212,8 +214,8 @@ class Scraper():
                     '?').replace(
                     '%3D',
                     '=').split('&')[0]
-                if name in this_name:
-                    sites.append(f'[{this_name}]({url})')
+                if name in game_name:
+                    sites.append(f'[{game_name}]({url})')
         if len(sites):
             self.tts_dict[name] = '\n'.join(sites)
             print(
