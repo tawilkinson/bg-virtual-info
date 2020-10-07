@@ -216,7 +216,7 @@ class Scraper():
                     '=').split('&')[0]
                 if name in game_name:
                     sites.append(f'[{game_name}]({url})')
-        if len(sites):
+        if len(sites) and name:
             self.tts_dict[name] = '\n'.join(sites)
             print(
                 '+++ Caching {} to Tabletop Simulator: {} games on TTS'.format(name, len(self.tts_dict)))
