@@ -161,7 +161,7 @@ class Scraper():
             if name == key:
                 return
         tabletopia_directory_page = Webpage(
-            self.make_tts_search_url(name)).page_html
+            self.make_tabletopia_search_url(name)).page_html
         search_results = tabletopia_directory_page.find_all(
             'a', class_='dropdown-menu__item dropdown-item-thumb')
         for result in search_results:
@@ -313,7 +313,7 @@ class Scraper():
             self.search_tabletopia(name)
             for key in self.tabletopia_dict:
                 if name in key:
-                    games.append(self.tts_dict[key])
+                    games.append(self.tabletopia_dict[key])
             site = separator.join(games)
         if tts:
             self.search_tts(name)
