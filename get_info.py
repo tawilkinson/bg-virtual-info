@@ -370,17 +370,23 @@ def main():
 def scrape(scraper, start=1, end=100, verbose=False, resume=True):
     print('--- Base url to search: {}'.format(scraper.current_url))
 
+    write = save_info.Writer({}, 'games.json')
+
     with shelve.open('games') as db:
         try:
             if db['last_id'] > 0 and resume:
                 print('--- Resuming from id: {}'.format(db['last_id']))
                 start = db['last_id'] + 1
+            else:
+                print(
+                    '!!! Wiping {} games from local cache [--restart]'.format(len(db)))
+                db.clear()
         except:
             print('!!! No stored data, start from start')
             db['last_id'] = 0
 
         for num in range(start, end+1):
-            db['last_id'] = num
+
             scraper.increment_url(num=num)
             if verbose:
                 print('--- Now searching: {}'.format(scraper.current_url))
@@ -398,21 +404,24 @@ def scrape(scraper, start=1, end=100, verbose=False, resume=True):
             if success and save:
                 db[str(num)] = game
                 print('+++ Adding id:{} - {}, {} games in database'.format(
-                    num, game['name'], len(db)))
+                    num, game['name'], len(db)-1))
+                # Dump results every 10 games
+                if ((len(db)-1) % 10) == 0:
+                    write.update_obj(db)
+                    if verbose:
+                        print(
+                            '--- {} games, dumping to json'.format(len(write.obj['games'])))
+                    write.dump_to_file(verbose)
             else:
                 # Could log issues here
                 if verbose:
                     print('!!! Skipping {}'.format(game['name']))
+            db['last_id'] = num
 
-        output = {}
-        output['games'] = []
-        for key in db.keys():
-            if key != 'last_id':
-                output['games'].append(db[key])
+        write.update_obj(db)
     print(
-        '--- Finished: {} games in database'.format(len(output['games'])))
-    write = save_info.Writer(output, 'games.json')
-    write.dump_to_file()
+        '--- Finished: {} games in database'.format(len(write.obj['games'])))
+    write.dump_to_file(True)
 
 
 if __name__ == '__main__':
