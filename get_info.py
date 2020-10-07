@@ -1,24 +1,89 @@
 import requests
 import argparse
 import shelve
+import time
+import lxml
 from urllib.parse import urlunsplit, urlencode
 from urllib3 import exceptions
 from bs4 import BeautifulSoup
 import save_info
 
 
+class Webpage(BeautifulSoup):
+    def __init__(self, url):
+        self.response = requests.get(url)
+        self.page_response = self.response
+        self.page_html = BeautifulSoup(self.response.text, 'lxml')
+
+
+class Game():
+    def __init__(self, id=0, name='', description='', bgg='', image='',
+                 tabletopia=False, tts=False, bga=False, yucata=False,
+                 boite=False, app=False):
+        self.id = id
+        self.name = name
+        self.description = description
+        self.bgg = bgg
+        self.image = image
+        self.tabletopia = tabletopia
+        self.tts = tts
+        self.bga = bga
+        self.yucata = yucata
+        self.boite = boite
+        self.app = app
+
+    def get_game_dict(self):
+        game_dict = {}
+        game_dict['id'] = self.id
+        game_dict['name'] = self.name
+        game_dict['description'] = self.description
+        game_dict['bgg'] = self.bgg
+        game_dict['image'] = self.image
+        game_dict['tabletopia'] = self.tabletopia
+        game_dict['tts'] = self.tts
+        game_dict['bga'] = self.bga
+        game_dict['yucata'] = self.yucata
+        game_dict['boite'] = self.boite
+        game_dict['app'] = self.app
+        return game_dict
+
+    def print_game(self):
+        print(f'Game: {self.name} - BGG ID: {self.id}')
+        print(f'Description: \n"{self.description}"')
+        if self.bgg:
+            print(f'On Board Game Geek: {self.bgg}')
+            print(f'With image: {self.image}')
+        if self.app:
+            print(f'Has an app: {self.app}')
+        if self.bga:
+            print(f'On Board Game Arena: {self.bga}')
+        if self.boite:
+            print(f'On Boîte à Jeux: {self.boite}')
+        if self.tabletopia:
+            print(f'On Tabletopia: {self.tabletopia}')
+        if self.tts:
+            print(f'On Tabletop Simulator: {self.tts}')
+        if self.yucata:
+            print(f'On Yucata: {self.yucata}')
+
+
 class Scraper():
-    def __init__(self, base_url, https=True):
-        self.base_url = base_url
-        self.current_url = base_url
+    def __init__(self, https=True):
+        self.base_url = 'boardgamegeek.com'
+        self.current_url = 'boardgamegeek.com'
         self.id = 0
         if https:
             self.scheme = 'https'
         else:
             self.scheme = 'http'
         self.base_path = ''
-        if 'boardgamegeek' in base_url:
-            self.setup_bgg()
+        self.setup_bgg()
+        self.bga_search_url = f'https://boardgamearena.com/gamepanel?game='
+        self.bgg_search_url = f'http://www.boardgamegeek.com/xmlapi2/search?query='
+        self.boite_search_url = 'http://www.boiteajeux.net/index.php?p=regles'
+        self.tabletopia_search_url = f'https://tabletopia.com/playground/playgroundsearch/search?timestamp='
+        self.tts_search_url = f'https://www.google.com/search?q="Tabletop Simulator"&q="'
+        self.yucata_search_url = 'https://www.yucata.de/en/'
         self.set_url()
         print('--- Caching Board Game Arena')
         self.setup_bga()
@@ -26,12 +91,29 @@ class Scraper():
         print('--- Caching Boîte à Jeux')
         self.setup_boite()
         print('+++ {} games added'.format(len(self.boite_dict)))
+        print('--- Initialising Tabletopia Cache')
+        self.setup_tabletopia()
         print('--- Caching Tabletop Simulator')
         self.setup_tts()
         print('+++ {} games added'.format(len(self.tts_dict)))
         print('--- Caching Yucata')
         self.setup_yucata()
         print('+++ {} games added'.format(len(self.yucata_dict)))
+
+    def make_bga_url(self, name):
+        return self.bga_search_url + '{name}'
+
+    def make_bgg_search_url(self, name, exact=True):
+        if exact:
+            return self.bgg_search_url + f'{name}&exact=1&type=boardgame'
+        else:
+            return self.bgg_search_url + f'{name}&exact=0&type=boardgame'
+
+    def make_tabletopia_search_url(self, name):
+        return self.tabletopia_search_url + f'{int(time.time() * 1000)}&query={name}'
+
+    def make_tts_search_url(self, name):
+        return self.tts_search_url + f'{name}"&as_sitesearch=steamcommunity.com&adtest=off&num=1'
 
     def setup_bga(self):
         try:
@@ -56,7 +138,7 @@ class Scraper():
         try:
             html = requests.get('http://www.boiteajeux.net/index.php?p=regles')
         except:
-            print('!!! Can\'t get Boite a Jeux data')
+            print('!!! Can\'t get Boîte à Jeux data')
             exit()
         soup = BeautifulSoup(html.text, 'html.parser')
         self.boite_dict = {}
@@ -67,6 +149,27 @@ class Scraper():
             site += 'http://www.boiteajeux.net/index.php?p=regles'
             site += ')'
             self.boite_dict[name] = site
+
+    def setup_tabletopia(self):
+        self.tabletopia_dict = {}
+
+    def search_tabletopia(self, name):
+        # Don't waste time on games already in dict
+        for key in self.tabletopia_dict:
+            if name == key:
+                return
+        tabletopia_directory_page = Webpage(
+            self.make_tts_search_url(name)).page_html
+        search_results = tabletopia_directory_page.find_all(
+            'a', class_='dropdown-menu__item dropdown-item-thumb')
+        for result in search_results:
+            game_name = result.text.strip()
+            game_tabletopia_url = result['href']
+            game_tabletopia_url = f'https://tabletopia.com{game_tabletopia_url}'
+            formatted_link = f'[{game_name} on Tabletopia]({game_tabletopia_url})'
+            self.tabletopia_dict[game_name] = formatted_link
+            print('+++ Caching {} to Tabletopia: {} games on Tabletopia'.format(game_name,
+                                                                                len(self.tabletopia_dict)))
 
     def setup_tts(self):
         try:
@@ -85,9 +188,30 @@ class Scraper():
             site += ')'
             self.tts_dict[name] = site
 
+    def search_tts(self, name):
+        # Don't waste time on games already in dict
+        for key in self.tts_dict:
+            if name == key:
+                return
+        tts_search = Webpage(self.make_tts_search_url(name)).page_html
+        search_results = tts_search.body.select('body a')
+        for result in search_results:
+            url = result['href']
+            if 'https://steamcommunity.com' in url:
+                url = url.replace(
+                    '/url?q=',
+                    '').replace(
+                    '%3F',
+                    '?').replace(
+                    '%3D',
+                    '=').split('&')[0]
+                self.tts_dict[name] = f'[{name}]({url})'
+                print(
+                    '+++ Caching {} to Tabletop Simulator: {} games on TTS'.format(name, len(self.tts_dict)))
+
     def setup_yucata(self):
         try:
-            html = requests.get('https://www.yucata.de/en')
+            html = requests.get(self.yucata_search_url)
         except:
             print('!!! Can\'t get Yucata data')
             exit()
@@ -97,7 +221,7 @@ class Scraper():
         for game in all_games:
             name = game.text
             site = '[{}]('.format(game.text)
-            site += 'https://www.yucata.de'
+            site += self.yucata_search_url[:-3]
             site += game['href']
             site += ')'
             self.yucata_dict[name] = site
@@ -123,19 +247,9 @@ class Scraper():
     def game_setter(self, id, name='', description='', bgg='', image='',
                     tabletopia=False, tts=False, bga=False, yucata=False,
                     boite=False, app=False):
-        game_dict = {}
-        game_dict['id'] = id
-        game_dict['name'] = name
-        game_dict['description'] = description
-        game_dict['bgg'] = bgg
-        game_dict['image'] = image
-        game_dict['tabletopia'] = tabletopia
-        game_dict['tts'] = tts
-        game_dict['bga'] = bga
-        game_dict['yucata'] = yucata
-        game_dict['boite'] = boite
-        game_dict['app'] = app
-        return game_dict
+        game = Game(id, name, description, bgg, image,
+                    tabletopia, tts, bga, yucata, boite, app)
+        return game.get_game_dict()
 
     def get_bgg(self):
         bgg = self.html.url
@@ -185,9 +299,13 @@ class Scraper():
                     games.append(self.boite_dict[key])
             site = separator.join(games)
         if tabletopia:
-            # TODO: Need JS scraping
-            pass
+            self.search_tabletopia(name)
+            for key in self.tabletopia_dict:
+                if name in key:
+                    games.append(self.tts_dict[key])
+            site = separator.join(games)
         if tts:
+            self.search_tts(name)
             for key in self.tts_dict:
                 if name == key:
                     games.append(self.tts_dict[key])
@@ -245,7 +363,7 @@ def main():
 
     print('--- Scraping BGG from {} to {}'.format(args.start, args.end))
 
-    bgg_scraper = Scraper('boardgamegeek.com')
+    bgg_scraper = Scraper()
     scrape(bgg_scraper, args.start, args.end, args.verbose, args.restart)
 
 
