@@ -82,7 +82,9 @@ class Scraper():
         self.bgg_search_url = f'http://www.boardgamegeek.com/xmlapi2/search?query='
         self.boite_search_url = 'http://www.boiteajeux.net/index.php?p=regles'
         self.tabletopia_search_url = f'https://tabletopia.com/playground/playgroundsearch/search?timestamp='
-        self.tts_search_url = f'https://www.google.com/search?q="Tabletop Simulator"&q="'
+        self.tts_dlc_url = 'https://store.steampowered.com/search/?term=tabletop+simulator&category1=21'
+        self.tts_search_url = f'https://steamcommunity.com/workshop/browse/?appid=286160&searchtext='
+        self.tts_qualifiers = f'&browsesort=textsearch&section=readytouseitems&requiredtags%5B0%5D=Game&actualsort=textsearch&p=1'
         self.yucata_search_url = 'https://www.yucata.de/en/'
         self.set_url()
         print('--- Caching Board Game Arena')
@@ -113,7 +115,7 @@ class Scraper():
         return self.tabletopia_search_url + f'{int(time.time() * 1000)}&query={name}'
 
     def make_tts_search_url(self, name):
-        return self.tts_search_url + f'{name}"&as_sitesearch=steamcommunity.com&adtest=off&num=1'
+        return self.tts_search_url + f'{name}' + self.tts_qualifiers
 
     def setup_bga(self):
         try:
@@ -172,31 +174,36 @@ class Scraper():
                                                                                 len(self.tabletopia_dict)))
 
     def setup_tts(self):
-        try:
-            html = requests.get(
-                'https://store.steampowered.com/dlc/286160/Tabletop_Simulator')
-        except:
-            print('!!! Can\'t get Tabletop Simulator data')
-            exit()
-        soup = BeautifulSoup(html.text, 'html.parser')
-        all_games = soup.find_all('a', class_='recommendation_link')
+        tts_dlc = Webpage(self.tts_dlc_url)
+        tts_dlc_html = tts_dlc.page_html
         self.tts_dict = {}
-        for game in all_games:
-            name = game.find('span', class_='color_created').text
-            site = '[{}]('.format(name)
-            site += game['href']
-            site += ')'
-            self.tts_dict[name] = site
+        if tts_dlc.response.status_code == 200:
+            all_games = tts_dlc_html.find_all(
+                'div', {'class': 'search_name'})
+
+            for game in all_games:
+                this_name = game.text.lstrip('\n').rstrip('\n ')
+                name = this_name.replace('Tabletop Simulator - ', '')
+                if 'Tabletop Simulator' in this_name:
+                    url = game.parent.parent['href']
+                    url = url.split('?snr=')[0]
+                    site = f'[{this_name}]({url})'
+                    self.tts_dict[name] = site
+        else:
+            print('!!! Can\'t get Tabletop Simulator data')
 
     def search_tts(self, name):
-        # Don't waste time on games already in dict
+        # Don't lose the official DLC
+        sites = []
         for key in self.tts_dict:
-            if name == key:
-                return
+            if name in key:
+                sites.append(self.tts_dict[key])
         tts_search = Webpage(self.make_tts_search_url(name)).page_html
-        search_results = tts_search.body.select('body a')
+        search_results = tts_search.find_all(
+            'div', {'class': 'workshopItemTitle'})
         for result in search_results:
-            url = result['href']
+            this_name = result.text
+            url = result.parent['href']
             if 'https://steamcommunity.com' in url:
                 url = url.replace(
                     '/url?q=',
@@ -205,9 +212,12 @@ class Scraper():
                     '?').replace(
                     '%3D',
                     '=').split('&')[0]
-                self.tts_dict[name] = f'[{name}]({url})'
-                print(
-                    '+++ Caching {} to Tabletop Simulator: {} games on TTS'.format(name, len(self.tts_dict)))
+                if name in this_name:
+                    sites.append(f'[{this_name}]({url})')
+        if len(sites):
+            self.tts_dict[name] = '\n'.join(sites)
+            print(
+                '+++ Caching {} to Tabletop Simulator: {} games on TTS'.format(name, len(self.tts_dict)))
 
     def setup_yucata(self):
         try:
@@ -220,11 +230,12 @@ class Scraper():
         self.yucata_dict = {}
         for game in all_games:
             name = game.text
-            site = '[{}]('.format(game.text)
-            site += self.yucata_search_url[:-3]
-            site += game['href']
-            site += ')'
-            self.yucata_dict[name] = site
+            if 'GameInfo' in game['href']:
+                site = '[{}]('.format(game.text)
+                site += self.yucata_search_url[:-4]
+                site += game['href']
+                site += ')'
+                self.yucata_dict[name] = site
 
     def setup_bgg(self):
         self.base_path = '/boardgame/'
@@ -363,8 +374,12 @@ def main():
 
     print('--- Scraping BGG from {} to {}'.format(args.start, args.end))
 
+    if not args.restart or args.start > 1:
+        # This will clear local cache
+        restart = False
+
     bgg_scraper = Scraper()
-    scrape(bgg_scraper, args.start, args.end, args.verbose, args.restart)
+    scrape(bgg_scraper, args.start, args.end, args.verbose, restart)
 
 
 def scrape(scraper, start=1, end=100, verbose=False, resume=True):
@@ -402,6 +417,7 @@ def scrape(scraper, start=1, end=100, verbose=False, resume=True):
                 break
 
             if success and save:
+                db['last_id'] = num
                 db[str(num)] = game
                 print('+++ Adding id:{} - {}, {} games in database'.format(
                     num, game['name'], len(db)-1))
