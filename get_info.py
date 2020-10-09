@@ -375,7 +375,8 @@ def main():
     args = parser.parse_args()
 
     print('--- Scraping BGG from {} to {}'.format(args.start, args.end))
-
+    
+    restart = True
     if not args.restart or args.start > 1:
         # This will clear local cache
         restart = False
