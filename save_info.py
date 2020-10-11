@@ -16,7 +16,10 @@ class Writer():
         output['games'] = []
         for key in db.keys():
             if key != 'last_id':
-                output['games'].append(db[key])
+                try:
+                    output['games'].append(db[key])
+                except KeyError:
+                    print('!!! Local Shelve Database may be corrupted!')
         self.obj = output
 
     def dump_to_file(self, verbose=False):
