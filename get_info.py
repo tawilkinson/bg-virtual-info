@@ -200,7 +200,10 @@ class Scraper():
             name_check = 'Tabletop Simulator - ' + name
             if name_check == key:
                 sites.append(self.tts_dict[key])
-        tts_search = Webpage(self.make_tts_search_url(name)).page_html
+        try:
+            tts_search = Webpage(self.make_tts_search_url(name)).page_html
+        except requests.exceptions.SSLError:
+            return
         search_results = tts_search.find_all(
             'div', {'class': 'workshopItemTitle'})
         for result in search_results:
@@ -371,29 +374,44 @@ def main():
                         type=int, default=190000)
     parser.add_argument('-r', '--restart', help='Ignore previously acquired data and overwrite',
                         action='store_false')
+    parser.add_argument('-f', '--fix', help='Recreate local database when it causes error',
+                        action='store_true')
     args = parser.parse_args()
 
     print('--- Scraping BGG from {} to {}'.format(args.start, args.end))
-    
+
     restart = True
     if not args.restart or args.start > 1:
         # This will clear local cache
         restart = False
 
     bgg_scraper = Scraper()
-    scrape(bgg_scraper, args.start, args.end, args.verbose, restart)
+    scrape(bgg_scraper, args.start, args.end, args.verbose, restart, args.fix)
 
 
-def scrape(scraper, start=1, end=100, verbose=False, resume=True):
+def scrape(scraper, start=1, end=100, verbose=False, resume=True, fix=False):
     print('--- Base url to search: {}'.format(scraper.current_url))
 
     write = save_info.Writer({}, 'games.json')
 
+    if fix:
+        print('!!! Corrupt db, restoring from local games.json')
+        read = save_info.Reader({}, 'games.json')
+        with shelve.open('games') as db:
+            num = start
+            in_dict = read.read_json(num)
+            for key in in_dict.keys():
+                db[str(key)] = in_dict[key]
+            last_id = num(db['last_id'])
+            len_db = len(db)
+        print(
+            f'--- Restored {len_db} games from json file. Last ID: {last_id}')
+
     with shelve.open('games') as db:
         try:
-            if db['last_id'] > 0 and resume:
+            if num(db['last_id']) > 0 and resume:
                 print('--- Resuming from id: {}'.format(db['last_id']))
-                start = db['last_id'] + 1
+                start = num(db['last_id'])
             else:
                 print(
                     '!!! Wiping {} games from local cache [--restart]'.format(len(db)))
