@@ -373,23 +373,19 @@ def main():
     parser.add_argument('-e', '--end', help='End page to scrape',
                         type=int, default=190000)
     parser.add_argument('-r', '--restart', help='Ignore previously acquired data and overwrite',
-                        action='store_false')
+                        action='store_true')
     parser.add_argument('-f', '--fix', help='Recreate local database when it causes error',
                         action='store_true')
     args = parser.parse_args()
 
     print('--- Scraping BGG from {} to {}'.format(args.start, args.end))
 
-    restart = True
-    if not args.restart or args.start > 1:
-        # This will clear local cache
-        restart = False
-
     bgg_scraper = Scraper()
-    scrape(bgg_scraper, args.start, args.end, args.verbose, restart, args.fix)
+    scrape(bgg_scraper, args.start, args.end,
+           args.verbose, args.restart, args.fix)
 
 
-def scrape(scraper, start=1, end=100, verbose=False, resume=True, fix=False):
+def scrape(scraper, start=1, end=100, verbose=False, restart=False, fix=False):
     print('--- Base url to search: {}'.format(scraper.current_url))
 
     write = save_info.Writer({}, 'games.json')
@@ -402,20 +398,21 @@ def scrape(scraper, start=1, end=100, verbose=False, resume=True, fix=False):
             in_dict = read.read_json(num)
             for key in in_dict.keys():
                 db[str(key)] = in_dict[key]
-            last_id = num(db['last_id'])
+            last_id = int(db['last_id'])
             len_db = len(db)
         print(
             f'--- Restored {len_db} games from json file. Last ID: {last_id}')
 
     with shelve.open('games') as db:
         try:
-            if num(db['last_id']) > 0 and resume:
-                print('--- Resuming from id: {}'.format(db['last_id']))
-                start = num(db['last_id'])
-            else:
+            if restart:
                 print(
                     '!!! Wiping {} games from local cache [--restart]'.format(len(db)))
                 db.clear()
+            else:
+                print('--- Resuming from id: {}'.format(db['last_id']))
+                start = int(db['last_id'])
+
         except:
             print('!!! No stored data, start from start')
             db['last_id'] = 0
